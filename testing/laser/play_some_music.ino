@@ -2,46 +2,60 @@
 
 int SOUND_PIN 9;
 
-unsigned int = frequency;   // in hertz
-unsigned long duration = ;  // in microseconds
+unsigned long note_duration = 1000;    // in milliseconds
+
+// note frequencies to play corresponding to the 12 different laser beams
+int frequencies = {NOTE_A3, NOTE_B3, NOTE_C4, NOTE_D4, NOTE_E4, NOTE_F4, NOTE_G4, NOTE_A4, NOTE_B4, NOTE_C5, NOTE_D5, NOTE_E5};
 
 void setup(void) {
     pinMode(SOUND_PIN, OUTPUT);
 
-    // simple test of the tone() function
-    // tone(pin, frequency(Hz), [duration(ms)]) & notone(pin)
-    int melody[] = {NOTE_C4, NOTE_G3,NOTE_G3, NOTE_A3, NOTE_G3,0, NOTE_B3, NOTE_C4};
-    int note_durations = {4,8,8,4,4,4,4,4}; // 4 = quarter note, 8 = eight note
-    for (int i = 0; i < 8; i++){
-        int note_duration = 1000/note_durations[i];
-        tone(SOUND_PIN, melody[i], note_duration);
-        delay(note_duration+250);
-        notone(SOUND_PIN);
-    }
+    play_melody();
 }
 
 void loop() {
     boolean changed = false;
     increment_mirror();
     changed = monitor_change();
-    play(changed);
+    if (monitor_change()){
+        play(step_position);
+    }
 }
 
 
-void play(bool changed, int step_position) {
-    frequency = get_frequency(step_position);
-    play_tone(frequency, duration);
+void play(int step_position) {
+    // play the note corresponding to this laser beam
+    tone(SOUND_PIN, notes[step_position], note_duration)
 }
 
-void play_tone(int frequency, int duration){
+
+void play_melody(){
+    // simple test of the tone() function
+    // tone(pin, frequency(Hz), [duration(ms)]) & notone(pin)
+    int melody[] = {NOTE_C4, NOTE_G3,NOTE_G3, NOTE_A3, NOTE_G3,0, NOTE_B3, NOTE_C4};
+    int fraction_of_note = {4,8,8,4,4,4,4,4}; // 4 = quarter note, 8 = eight note
+    for (int i = 0; i < 8; i++){
+        int duration = note_duration/fraction_of_note[i];
+        tone(SOUND_PIN, melody[i], duration);
+        delay(duration+250);
+        notone(SOUND_PIN);
+    }
+}
+
+
+void play2(int step_position) {
+    tone2(SOUND_PIN, frequencies[step_position], note_duration);
+}
+
+void tone2(int SOUND_PIN, int frequency, int note_duration){
     if (frequency == 0.0){
-        delayMicroseconds(duration);
+        delayMicroseconds(note_duration);
     }
     else {
         // calculate the half period in microseconds
-        int half_period = (int)(1.0E6/(2*frequency));
+        int half_period = (int)(1.0E3/(2*frequency));
         // calculate the number of cycles for duration
-        int nCycles = (int)(duration*frequency/1.0E6);
+        int nCycles = (int)(note_duration/(2*half_period));
         for (int i=0; i < nCycles; i++){
             digitalWrite(SOUND_PIN,HIGH);
             delayMicroseconds(half_period);
@@ -50,32 +64,4 @@ void play_tone(int frequency, int duration){
         }        
     }
     
-}
-
-int get_frequency(char step_position){
-    if (step_position = 0){
-        return 261;
-    }
-    else if (step_position = 1){
-        return 294;
-    }
-    else if (step_position = 2){
-        return 329;
-    }
-    else if (step_position = 3){
-        return 349;
-    }
-    else if (step_position = 4){
-        return 392;
-    }
-    else if (step_position = 5){
-        return 440;
-    }
-    else if (step_position = 6){
-        return 493;
-    }
-    else {
-        return 523;
-    }
-
 }
