@@ -1,116 +1,105 @@
 /*
-Arduino
+Laserharpe
 
-Om fila, prosjektet
-
+Labprosjekt i TFY4190 Instrumentering. 
+Jan Gulla og Oda Lauten
 */
 
+const boolean DEBUG = false;
 
 /*********************************
- *  IMPORTS
+ * IMPORTS
  *********************************/
 
 #include <Stepper.h>
-#include <SFE_TSL2561.h>
 #include <Wire.h>
 
-//#include "laser3.h"
+#include "laser3.h"
+
 
 /*********************************
- *  GLOBAL
+ * GLOBAL
  *********************************/
 
 /* Connections */
-const int ledPin = 13;
-const int motorPin1 = 4;
-const int motorPin2 = 5;
-const int motorPin3 = 6;
-const int motorPin4 = 7;
-const int lightPin = 0;
-const int lightPin2 = 2;
+const int MOTOR_PIN_1 = 4;
+const int MOTOR_PIN_2 = 5;
+const int MOTOR_PIN_3 = 6;
+const int MOTOR_PIN_4 = 7;
+const int LIGHT_PIN = 0;
+const int LED_PIN = 13;
 
 /* Stepper */
 const int STEPS_PER_REVOLUTION = 200;
 const int MAX_RPM = 150;
 const int NUMBER_OF_STEPS = 12;
-int step_position = 5;
-int dir = 1;
 
 /* Light */
-const boolean gain = 1;                 // Gain setting, 0 = X1 low gain, 1 = X16 high gain
-unsigned int shutter_time = 1;              // Integration ("shutter") time in millisecond
-const double threshold = 90;
-const unsigned char shutter_time_code = 3;
+const double THRESHOLD = 90;
 int lux;
 int light_levels[12];
-int backlight = 0;
+int backlight;
 
-int current = -1;
+/* Current state */
+int current = -1;        // Current note playing. Initial: none
+int step_position = 5;   // Current step position. Initial position of stepper: 5 of [0 - 11]
+int dir = 1;             // Current step directio. Initial direction of stepper: 1
 
-// initialize the stepper library on pins 8 through 11:
-Stepper stepper(STEPS_PER_REVOLUTION, motorPin1, motorPin2, motorPin3, motorPin4);
+// initialize the stepper library
+Stepper stepper(STEPS_PER_REVOLUTION, MOTOR_PIN_1, MOTOR_PIN_2, MOTOR_PIN_3, MOTOR_PIN_4);
 
+/* Time */
+const int TIME_LIMIT[2] = {3000, 10000};
 unsigned long time = 0;
 unsigned long last_time = 0;
 
-/**********************************
+/**********************************/
 
-
-/**
+/*
  * Setup
- */ 
+ * 
+ * Initiates the arduino. 
+ */
 void setup() {
-    Serial.begin(9600);
-    
+    if (DEBUG) {
+        Serial.println(9600);
+    }
+
     /* Connections */
-    pinMode(ledPin, OUTPUT);
-    pinMode(lightPin, INPUT);
-    //pinMode(lightPin2, INPUT);
-    
+    pinMode(LIGHT_PIN, INPUT);
+
     /* Init */
     stepper.setSpeed(MAX_RPM);
     Wire.begin();
-    
-    //Serial light sensor
-    //light.begin(); 
 
-    // setTiming() will set the shutter time
-    //light.setTiming(gain, shutter_time_code, shutter_time);
-
-    // To start taking measurements, power up the sensor:
-    //light.setPowerUp();
-    
-    //shutter_time = 1;
-    
     /* Calibration */
     calibrate_light();
-    calibrate_stepper();
 }
 
+/* 
+ * Calibrate light
+ * 
+ * Calibrates the backlight values. 
+ */
 void calibrate_light() {
-    lux = analogRead(lightPin);
+    lux = analogRead(LIGHT_PIN);
     backlight = lux;
-    Serial.println(backlight);
+    if (DEBUG) {
+        Serial.println("backlight: ");
+        Serial.println(backlight);
+    }
 }
-
-void calibrate_stepper() {
-    
-}
-
 
 /**
  * Loop
+ *
+ * Main loop. 
  */ 
 void loop() {
+    int time_index = (dir + 1) / 2;
     time = micros();
-    double time_limit;
-    if (dir == 1) {
-        time_limit = 10000;
-    } else {
-        time_limit = 3000;
-    }
-    if (time - last_time > time_limit) { // 3000
-        //Serial.println("step");
+    
+    if (time - last_time > TIME_LIMIT[time_index]) {
         last_time = time;
 
         if (dir == 1) {
@@ -125,11 +114,12 @@ void loop() {
     }
 }
 
-void stepper_move(int dir) {
-    stepper.step(dir);
-    //delay(1); // 2, 200
-}
-
+/*
+ * Increment mirror
+ *
+ * Increments the mirror a single step in
+ * the current direction. 
+ */
 void increment_mirror() {
     if (dir == 1) {
         if (step_position < NUMBER_OF_STEPS - 1) {
@@ -137,7 +127,6 @@ void increment_mirror() {
             step_position++;
         } else {
             dir = - dir;
-            //delay(100);
             stepper_move(dir);
             step_position--;
         }
@@ -147,22 +136,43 @@ void increment_mirror() {
             step_position--;
         } else {
             dir = - dir;
-            //delay(100);
             stepper_move(dir);
             step_position++;
         }
     }
 }
 
+/*
+ * Stepper move
+ *
+ * Moves the stepper in the specified direction. 
+ */
+void stepper_move(int dir) {
+    stepper.step(dir);
+}
+
+/* Record light
+ * 
+ * Records the current light level received 
+ * by the sensor. The data is stored in
+ * light_levels;
+ */
 void record_light() {
-    lux = analogRead(lightPin);
-    //delay(1000);
-    if (step_position == 4) {
-        Serial.println(lux);
+    lux = analogRead(LIGHT_PIN);
+    if (DEBUG) {
+        if (step_position == 4) {
+            Serial.println(lux);
+        }
     }
     light_levels[step_position] = lux;
 }
 
+/*
+ * Max index
+ *
+ * Returns the index of the maximum element of
+ * the array. 
+ */
 int max_index(int array[], int size_a) {
     int temp = 0;
     int index = 0;
@@ -175,10 +185,17 @@ int max_index(int array[], int size_a) {
     return index;
 }
 
+/* 
+ * Detect
+ *
+ * Determines if the light is above the 
+ * threshold value, thereby signaling 
+ * the other arduino to produce a tone. 
+ */
 void detect() {
     int index = max_index(light_levels, 12);
     
-    if (light_levels[index] - backlight > threshold) {
+    if (light_levels[index] - backlight > THRESHOLD) {
         transmit(index);
         current = index;
     } else if (current != -1) {
@@ -187,6 +204,11 @@ void detect() {
     }
 }
 
+/*
+ * Transmit
+ *
+ * Transmits the data to other arduino. 
+ */
 void transmit(int data) {
     Wire.beginTransmission(9);
     Wire.write(data);
