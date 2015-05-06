@@ -1,9 +1,11 @@
 /*
 Arduino
 
-Om fila, prosjektet
+The music file corresponding to the project laser harp.
 
 */
+
+const boolean debug = False;
 
 /*********************************
  *  IMPORTS
@@ -21,12 +23,13 @@ Om fila, prosjektet
 const int SOUND_PIN = 9;
 
 /* Variables */
-unsigned long note_duration = 1000;    // in milliseconds
-int step_position;
+unsigned long note_duration = 100;    // in milliseconds
+int step_position = -1;
 int current;
 
+
 // note frequencies corresponding to the 12 different laser beams
-int frequencies[] = {NOTE_A3, NOTE_B3, NOTE_C4, NOTE_D4, NOTE_E4, NOTE_F4, NOTE_G4, NOTE_A4, NOTE_B4, NOTE_C5, NOTE_D5, NOTE_E5};
+int frequencies[] = {NOTE_A3, NOTE_B3, NOTE_C4, NOTE_D4, NOTE_E4, NOTE_F4, NOTE_G4, NOTE_A4, NOTE_AS4, NOTE_C5, NOTE_D5, NOTE_E5};
 
 
 /**********************************
@@ -36,6 +39,10 @@ int frequencies[] = {NOTE_A3, NOTE_B3, NOTE_C4, NOTE_D4, NOTE_E4, NOTE_F4, NOTE_
  * Setup
  */ 
 void setup(void) {
+    if debug{
+        Serial.begin(9600);
+        play_melody();
+    }
     Wire.begin(9);
     Wire.onReceive(receiveEvent);
     pinMode(SOUND_PIN, OUTPUT);
@@ -57,15 +64,18 @@ void loop() {
  * notone(pin)
  */
 void play(int step_position) {
-    if (step_position == current) { return; }
     if (step_position >= 0 && step_position < 12){
-        tone(SOUND_PIN, frequencies[step_position]);
+        if debug {
+            Serial.println("tone");
+        }
+        tone(SOUND_PIN, frequencies[step_position], note_duration);
         current = step_position;
     }
-    else if (step_position >= 12 && step_position < 24){
-        if (step_position == current+12){
-            noTone(SOUND_PIN);
+    else if (step_position == current+12){
+        if debug {
+            Serial.println("notone");
         }
+        noTone(SOUND_PIN);
     } 
 }
 
@@ -74,7 +84,10 @@ void play(int step_position) {
  * Receive integer (0-23) corresponding to the step position from the other Arduino.
  */
 void receiveEvent(int howMany) {
-  step_position = Wire.read();    // receive byte as an integer
+    step_position = Wire.read();    // receive byte as an integer
+    if debug {
+        Serial.println(step_position);
+    }
 }
 
 

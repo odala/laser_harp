@@ -26,6 +26,8 @@ const int motorPin1 = 4;
 const int motorPin2 = 5;
 const int motorPin3 = 6;
 const int motorPin4 = 7;
+const int lightPin = 0;
+const int lightPin2 = 2;
 
 // Create an SFE_TSL2561 object, here called "light"
 SFE_TSL2561 light;
@@ -34,20 +36,25 @@ SFE_TSL2561 light;
 const int STEPS_PER_REVOLUTION = 200;
 const int MAX_RPM = 150;
 const int NUMBER_OF_STEPS = 12;
-int step_position = 0;
+int step_position = 5;
 int dir = 1;
 
 /* Light */
-const boolean gain = 0;                 // Gain setting, 0 = X1 low gain, 1 = X16 high gain
-unsigned int shutter_time;              // Integration ("shutter") time in millisecond
-const double threshold = 50;
-const unsigned char shutter_time_code = 0;
+const boolean gain = 1;                 // Gain setting, 0 = X1 low gain, 1 = X16 high gain
+unsigned int shutter_time = 1;              // Integration ("shutter") time in millisecond
+const double threshold = 70;
+const unsigned char shutter_time_code = 3;
 double lux = 0;
-double old_lux = 0;
+double old_lux[12];
+double backlight = 0;
+
+int tone_step = -1;
 
 // initialize the stepper library on pins 8 through 11:
 Stepper stepper(STEPS_PER_REVOLUTION, motorPin1, motorPin2, motorPin3, motorPin4);
 
+unsigned long time = 0;
+unsigned long last_time = 0;
 
 /**********************************
 
@@ -56,20 +63,27 @@ Stepper stepper(STEPS_PER_REVOLUTION, motorPin1, motorPin2, motorPin3, motorPin4
  * Setup
  */ 
 void setup() {
-    //Serial.begin(9600);
-  
+    Serial.begin(9600);
+    
     /* Connections */
     pinMode(ledPin, OUTPUT);
+    pinMode(lightPin, INPUT);
+    //pinMode(lightPin2, INPUT);
     
     /* Init */
     stepper.setSpeed(MAX_RPM);
-    light.begin();
+    Wire.begin();
+    
+    //Serial light sensor
+    //light.begin(); 
 
     // setTiming() will set the shutter time
-    light.setTiming(gain, shutter_time_code, shutter_time);
+    //light.setTiming(gain, shutter_time_code, shutter_time);
 
     // To start taking measurements, power up the sensor:
-    light.setPowerUp();
+    //light.setPowerUp();
+    
+    //shutter_time = 1;
     
     /* Calibration */
     calibrate_light();
@@ -77,7 +91,12 @@ void setup() {
 }
 
 void calibrate_light() {
-    
+    lux = analogRead(lightPin);
+    for (int i = 0; i < 12; i++) {
+        old_lux[i] = lux;
+    }
+    backlight = lux;
+    Serial.println(backlight);
 }
 
 void calibrate_stepper() {
@@ -89,15 +108,52 @@ void calibrate_stepper() {
  * Loop
  */ 
 void loop() {
-    boolean changed = false;
-    increment_mirror();
-    changed = monitor_change();
-    play(changed);
+/*    Serial.println(step_position);
+    Wire.beginTransmission(9);
+    Wire.write(step_position);
+    step_position++;
+    Wire.endTransmission();
+    */
+    time = micros();
+    double time_limit;
+    if (dir == 1) {
+        time_limit = 10000;
+    } else {
+        time_limit = 3000;
+    }
+    if (time - last_time > time_limit) { // 3000
+        //Serial.println("step");
+        last_time = time;
+        //unsigned long time1 = 0;
+        //unsigned long time2 = 0;
+        
+        boolean changed = false;
+        if (dir == 1) {
+            detect();
+            //changed = monitor_change2();
+            //monitor_change2();
+        //if (step_position == 11){
+        //    Serial.println(changed);
+        //}
+            //play(changed);
+        }
+        
+        
+        increment_mirror();
+        
+        //boolean start = light.manualStart();
+        //delay(1);
+        //shutter_time = 1;
+        //time1 = micros();
+        //boolean stopp = light.manualStop();
+        //time2 = micros();
+        //Serial.println(time2 - time1);
+    }
 }
 
 void stepper_move(int dir) {
     stepper.step(dir);
-    delay(1); // 2, 200
+    //delay(1); // 2, 200
 }
 
 void increment_mirror() {
@@ -124,26 +180,113 @@ void increment_mirror() {
     }
 }
 
+void detect_test() {
+    if (tone_step != step_position && tone_step != -1) {
+        return;
+    }
+    int lux = analogRead(lightPin);
+    
+    int signal;
+    
+    if (tone_step != step_position) {
+        if (lux > old_lux[step_position] + threshold) {
+            signal = step_position;
+            tone_step = step_position;
+            old_lux[step_position] = lux;
+        }
+    } else {
+        if (lux < old_lux[step_position] - threshold) {
+            signal = step_position + 12;
+            tone_step = -1;
+            old_lux[step_position] = lux;
+        }
+    }
+     
+    Wire.beginTransmission(9);
+    Wire.write(signal);
+    Wire.endTransmission();
+}
+
+
+void detect() {
+    if (step_position == 4) {
+        int lux = analogRead(lightPin);
+        Serial.println(lux);
+    }
+  
+  
+  /*
+    int lux = analogRead(lightPin);
+    
+    int signal;
+    
+    if (lux - backlight > threshold) {
+    */    
+  
+  
+}
+
 boolean monitor_change() {
-    lux = get_lux();
-    //Serial.println(lux);
+    int LDRReading = analogRead(lightPin);
+    //int LLRReading = digitalRead(lightPin2); 
+    //Serial.print("simple lux: ");
+    //if (step_position == 4) {
+        //Serial.println(LDRReading);
+    //}
+    // Print out
+    //Serial.println(LDRReading);
+    //Serial.println(LLRReading);
+    //delay(250); //just here to slow down the output for easier reading
     
-    double diff = lux - old_lux;
+    lux = LDRReading;
     
-    old_lux = lux;
-    if (diff > threshold || diff < - threshold) {
+    double diff = LDRReading - backlight;
+   
+    if (diff > threshold) {
         return true;
     } else {
         return false;
-    }
-} 
+    }  
+    
+    //return LLRReading;
+}
+
+boolean monitor_change2() {
+    int LDRReading = analogRead(lightPin);
+    //int LLRReading = digitalRead(lightPin2); 
+    //Serial.print("simple lux: ");
+    //if (step_position == 4) {
+        //Serial.println(LDRReading);
+    //}
+    // Print out
+    //Serial.println(LDRReading);
+    //Serial.println(LLRReading);
+    //delay(250); //just here to slow down the output for easier reading
+    
+    lux = LDRReading;
+    
+    double diff = lux - old_lux[step_position];
+   
+    if (diff > threshold) {
+        return true;
+    } else {
+        return false;
+    }  
+    
+    old_lux[step_position] = lux;
+    //return LLRReading;
+}
 
 void play(boolean changed) {
+    Wire.beginTransmission(9);
     if (changed) {
-        digitalWrite(ledPin, HIGH);
+        Wire.write(step_position);
+        //Serial.println(step_position);
     } else {
-        digitalWrite(ledPin, LOW);
+        Wire.write(step_position+12);
+        //Serial.println(step_position + 12);
     }
+    Wire.endTransmission();
 }
 
 double get_lux() {
@@ -162,7 +305,8 @@ double get_lux() {
         double lux_reading;
         // Perform lux calculation:
         good = light.getLux(gain, shutter_time, data0, data1, lux_reading);
-        
+        Serial.print("good: ");
+        Serial.println(good);
         return lux_reading;
     } else {
         // getData() returned false because of an I2C error, inform the user.
